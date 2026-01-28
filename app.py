@@ -74,7 +74,7 @@ Step 2: Select 2–3 of the most impressive or recent highlights from the summar
 
 Step 3: Transition smoothly into introducing the channel: it creates authentic, technical breakdowns, educational insights, and short-form content about grappling, MMA, Wrestling, and high-level combat sports — made for serious fans and practitioners.
 
-Step 4: Clearly invite them for an interview/conversation about their journey, mindset, experience, and insights into BJJ/MMA. Emphasize that scheduling is flexible — whenever is convenient for them.
+Step 4: Clearly invite them for an interview/conversation about their journey, mindset, experience, and insights into BJJ/MMA. Emphasize that scheduling is flexible — whenever is convenient for them. And link the channel, https://www.youtube.com/@Rob-J-BJJ, telling them they can check it out if interested.
 
 Rules:
 - Tone: friendly, professional, brief, authentic — like a real fan who respects the sport
