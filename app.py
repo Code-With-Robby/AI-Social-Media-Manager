@@ -1,60 +1,94 @@
-# Uses Gemini via OpenAI-compatible endpoint
-# Includes both non-streaming and streaming endpoints
-# Serves a simple HTML UI + JSON API
+# app.py - Flask version with agent + research tool
+# Generates personalized BJJ/MMA DMs via UI, JSON API, and streaming
 
 import os
 import asyncio
 from flask import Flask, request, jsonify, render_template, Response
 from dotenv import load_dotenv
-from openai import OpenAI, AsyncOpenAI
-from agents import Agent, Runner, trace, OpenAIChatCompletionsModel
+from openai import AsyncOpenAI
+from agents import Agent, Runner, trace, function_tool
+from agents import OpenAIChatCompletionsModel
 
 load_dotenv(override=True)
 
 # ────────────────────────────────────────────────
-# Gemini client setup (sync + async versions)
+# Gemini client & model
 # ────────────────────────────────────────────────
-sync_client = OpenAI(
-    api_key=os.getenv("GEMINI_API_KEY"),
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-)
-
-async_client = AsyncOpenAI(
+client = AsyncOpenAI(
     api_key=os.getenv("GEMINI_API_KEY"),
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
 )
 
 gemini_model = OpenAIChatCompletionsModel(
-    model=os.getenv("MODEL", "gemini-1.5-flash"),  # fallback if .env missing
-    openai_client=async_client,  # agents lib uses async
+    model=os.getenv("MODEL", "gemini-1.5-flash"),
+    openai_client=client,
 )
 
 # ────────────────────────────────────────────────
-# Agent definition (same as your original)
+# RESEARCH AGENT – used as a tool
 # ────────────────────────────────────────────────
-instructions = """
-You are a Social Media Manager for a BJJ/MMA-focused YouTube channel. Your task is to write a concise, respectful, and personalized Instagram or Twitter/X Direct Message to a specific BJJ, MMA, or UFC athlete with the goal of inviting them on for an interview.
+research_instructions = """
+You are a knowledgeable MMA/BJJ/UFC researcher.
 
-Use the following provided recent accomplishment or news about the athlete at the beginning of the message (be very specific and use 2–3 key points if multiple are provided). Show genuine awareness and respect for their career. Keep this opening natural and not overly flattering:
+When given an athlete's name, provide a concise, factual summary (4–8 sentences) of their career background and most relevant/recent accomplishments, fights, titles, rankings, or milestones.
 
-{athlete_accomplishment}
+Prioritize events and results from 2024–2026 if available.
+Include specific details: dates, opponents, results, titles won/lost, rankings, notable techniques, or career highlights.
+Be accurate and neutral — no hype or speculation.
 
-After the opening, smoothly transition into introducing the channel. The channel is a BJJ and MMA-focused YouTube channel that creates educational breakdowns, technical insights, and short-form, fast-paced content centered around grappling, MMA, and high-level combat sports. The tone of the channel is authentic, technical, and practitioner-focused, aimed at fans and athletes who genuinely love the sport.
+Output only the summary paragraph(s). No introductions, no questions, no bullet points unless it improves clarity.
+"""
 
-Clearly state that the purpose of the message is to invite the athlete on for an interview or conversation. Emphasize that the interview would focus on their experience, journey, mindset, and insights into BJJ and/or MMA, and that it would be scheduled at their earliest convenience, with flexibility around their availability.
+research_agent = Agent(
+    name="Athlete Researcher",
+    instructions=research_instructions,
+    model=gemini_model,
+)
 
-Keep the overall message friendly, professional, and brief—do not sound corporate, spammy, or overly promotional. Avoid buzzwords and marketing language. The message should feel like it’s coming from a real fan who respects the athlete and the sport.
+@function_tool
+async def get_athlete_info(name: str) -> str:
+    """
+    Retrieve a concise summary of a BJJ/MMA/UFC athlete's background and recent accomplishments.
+    Use this BEFORE writing any outreach message.
+    Input: full name of the athlete.
+    """
+    query = f"Provide a detailed career summary and recent highlights for: {name}"
+    
+    with trace(f"Researching {name}"):
+        result = await Runner.run(research_agent, query)
+    
+    return result.final_output.strip()
 
-At the very end of the message, include a soft call-to-action by linking the channel so they can check it out if they’re interested:
-https://www.youtube.com/@Rob-J-BJJ
+# ────────────────────────────────────────────────
+# SOCIAL MEDIA MANAGER AGENT – uses the research tool
+# ────────────────────────────────────────────────
+manager_instructions = """
+You are a Social Media Manager for a BJJ/MMA-focused YouTube channel: https://www.youtube.com/@Rob-J-BJJ
 
-Do not include hashtags, emojis (unless very subtle), or excessive formatting. Talk only in first person using "I" never using "We". My name is Robert. The final output should be a single, polished direct message ready to send. Keep the message at 1,000 CHARACTERS MAX.
+Your task is to write a concise, respectful, personalized direct message (Instagram or Twitter/X DM) inviting a BJJ, MMA, or UFC athlete for an interview.
+
+Step 1: ALWAYS use the get_athlete_info tool first to get accurate background and recent accomplishments for the named athlete.
+Step 2: Select 2–3 of the most impressive or recent highlights from the summary and mention them naturally at the beginning to show genuine awareness and respect.
+   - Be very specific (dates, opponents, results, titles, etc.).
+   - Keep the opening natural — never overly flattering.
+
+Step 3: Transition smoothly into introducing the channel: it creates authentic, technical breakdowns, educational insights, and short-form content about grappling, MMA, and high-level combat sports — made for serious fans and practitioners.
+
+Step 4: Clearly invite them for an interview/conversation about their journey, mindset, experience, and insights into BJJ/MMA. Emphasize that scheduling is flexible — whenever is convenient for them.
+
+Rules:
+- Tone: friendly, professional, brief, authentic — like a real fan who respects the sport
+- First person only ("I"), name: Robert
+- No hashtags, minimal/no emojis, no corporate/spammy language
+- Max 1000 characters
+- Output ONLY the final polished DM — nothing else
 """
 
 social_media_manager = Agent(
     name="Social Media Manager",
-    instructions=instructions,
-    model=gemini_model
+    instructions=manager_instructions,
+    model=gemini_model,
+    tools=[get_athlete_info],
 )
 
 # ────────────────────────────────────────────────
@@ -63,87 +97,60 @@ social_media_manager = Agent(
 app = Flask(__name__)
 
 # ────────────────────────────────────────────────
-# Non-streaming generation (sync wrapper around async agent)
+# Sync wrapper for agent (non-streaming)
 # ────────────────────────────────────────────────
-def generate_dm(athlete_name: str, accomplishment: str) -> str:
-    if not accomplishment:
-        accomplishment = "No specific recent accomplishment provided — mention their general skill / reputation in the sport."
+def generate_dm(athlete_name: str) -> str:
+    user_message = f"Send a personalized interview invitation DM to {athlete_name}"
 
-    user_message = f"""
-Athlete: {athlete_name}
-
-Recent accomplishment/news:
-{accomplishment}
-
-Send a DM to {athlete_name} inviting them for an interview.
-"""
-
-    # Run async agent in sync context
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        with trace("Social Media Manager"):
+        with trace("DM Generation"):
             result = loop.run_until_complete(Runner.run(social_media_manager, user_message))
         return result.final_output.strip()
     finally:
         loop.close()
 
 # ────────────────────────────────────────────────
-# Streaming version (yields chunks as agent generates)
+# Streaming generator (word-by-word simulation)
 # ────────────────────────────────────────────────
-async def generate_dm_stream(athlete_name: str, accomplishment: str):
-    if not accomplishment:
-        accomplishment = "No specific recent accomplishment provided — mention their general skill / reputation in the sport."
+async def generate_dm_stream(athlete_name: str):
+    user_message = f"Send a personalized interview invitation DM to {athlete_name}"
 
-    user_message = f"""
-Athlete: {athlete_name}
+    full_result = await Runner.run(social_media_manager, user_message)
+    text = full_result.final_output.strip()
 
-Recent accomplishment/news:
-{accomplishment}
-
-Send a DM to {athlete_name} inviting them for an interview.
-"""
-
-    # We'll simulate streaming by yielding the final result in chunks (since agents lib doesn't natively stream tokens yet)
-    # For real token-by-token streaming you'd need to wrap the underlying client directly
-    full_dm = await Runner.run(social_media_manager, user_message)
-    text = full_dm.final_output.strip()
-
-    # Yield word-by-word for demo effect
+    # Simulate streaming by yielding word by word
     words = text.split()
     for i, word in enumerate(words):
         yield word + (" " if i < len(words)-1 else "")
-        await asyncio.sleep(0.05)  # simulate typing effect
+        await asyncio.sleep(0.05)  # typing effect
 
 # ────────────────────────────────────────────────
-# Routes
+# Routes (exactly like your example)
 # ────────────────────────────────────────────────
 
 @app.route('/', methods=['GET'])
 def home():
-    return render_template('index.html', dm='', athlete_name='', accomplishment='')
+    return render_template('index.html', dm='', athlete_name='')
 
 @app.route('/generate_dm_ui', methods=['POST'])
 def generate_dm_ui():
     athlete_name = request.form.get('athlete_name', '').strip()
-    accomplishment = request.form.get('accomplishment', '').strip()
-
     if not athlete_name:
-        return render_template('index.html', dm="Please provide an athlete name.", athlete_name='', accomplishment='')
-
-    dm = generate_dm(athlete_name, accomplishment)
-    return render_template('index.html', dm=dm, athlete_name=athlete_name, accomplishment=accomplishment)
+        return render_template('index.html', dm="Please provide an athlete name.", athlete_name='')
+    
+    dm = generate_dm(athlete_name)
+    return render_template('index.html', dm=dm, athlete_name=athlete_name)
 
 @app.route('/generate_dm', methods=['POST'])
 def generate_dm_endpoint():
     data = request.get_json()
     if not data or 'athlete_name' not in data:
         return jsonify({"error": "Missing 'athlete_name' in request body"}), 400
-
+    
     athlete_name = data['athlete_name'].strip()
-    accomplishment = data.get('accomplishment', '').strip()
-
-    dm = generate_dm(athlete_name, accomplishment)
+    dm = generate_dm(athlete_name)
     return jsonify({"dm": dm})
 
 @app.route('/stream_dm', methods=['POST'])
@@ -151,13 +158,12 @@ def stream_dm():
     data = request.get_json()
     if not data or 'athlete_name' not in data:
         return jsonify({"error": "Missing 'athlete_name' in request body"}), 400
-
+    
     athlete_name = data['athlete_name'].strip()
-    accomplishment = data.get('accomplishment', '').strip()
 
     async def stream_response():
-        yield "data: Generating DM...\n\n"
-        async for chunk in generate_dm_stream(athlete_name, accomplishment):
+        yield "data: Generating personalized DM...\n\n"
+        async for chunk in generate_dm_stream(athlete_name):
             yield f"data: {chunk}\n\n"
         yield "data: [DONE]\n\n"
 
@@ -168,4 +174,5 @@ def stream_dm():
     )
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=True, host='0.0.0.0', port=port)
