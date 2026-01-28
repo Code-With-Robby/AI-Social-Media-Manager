@@ -28,7 +28,7 @@ gemini_model = OpenAIChatCompletionsModel(
 # RESEARCH AGENT – used as a tool
 # ────────────────────────────────────────────────
 research_instructions = """
-You are a knowledgeable MMA/BJJ/UFC researcher.
+You are a knowledgeable MMA/BJJ/UFC/Wrestler researcher.
 
 When given an athlete's name, provide a concise, factual summary (4–8 sentences) of their career background and most relevant/recent accomplishments, fights, titles, rankings, or milestones.
 
@@ -48,7 +48,7 @@ research_agent = Agent(
 @function_tool
 async def get_athlete_info(name: str) -> str:
     """
-    Retrieve a concise summary of a BJJ/MMA/UFC athlete's background and recent accomplishments.
+    Retrieve a concise summary of a BJJ/MMA/UFC/Wrestler athlete's background and recent accomplishments.
     Use this BEFORE writing any outreach message.
     Input: full name of the athlete.
     """
@@ -63,7 +63,7 @@ async def get_athlete_info(name: str) -> str:
 # SOCIAL MEDIA MANAGER AGENT – uses the research tool
 # ────────────────────────────────────────────────
 manager_instructions = """
-You are a Social Media Manager for a BJJ/MMA-focused YouTube channel: https://www.youtube.com/@Rob-J-BJJ
+You are a Social Media Manager for a BJJ/MMA/Wrestling-focused YouTube channel: https://www.youtube.com/@Rob-J-BJJ
 
 Your task is to write a concise, respectful, personalized direct message (Instagram or Twitter/X DM) inviting a BJJ, MMA, or UFC athlete for an interview.
 
@@ -72,7 +72,7 @@ Step 2: Select 2–3 of the most impressive or recent highlights from the summar
    - Be very specific (dates, opponents, results, titles, etc.).
    - Keep the opening natural — never overly flattering.
 
-Step 3: Transition smoothly into introducing the channel: it creates authentic, technical breakdowns, educational insights, and short-form content about grappling, MMA, and high-level combat sports — made for serious fans and practitioners.
+Step 3: Transition smoothly into introducing the channel: it creates authentic, technical breakdowns, educational insights, and short-form content about grappling, MMA, Wrestling, and high-level combat sports — made for serious fans and practitioners.
 
 Step 4: Clearly invite them for an interview/conversation about their journey, mindset, experience, and insights into BJJ/MMA. Emphasize that scheduling is flexible — whenever is convenient for them.
 
