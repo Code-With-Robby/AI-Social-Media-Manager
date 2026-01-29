@@ -13,7 +13,7 @@ app = Flask(__name__)
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["1 per minute"],
+    default_limits=["5 per minute"],
     storage_uri="memory://"  # in-memory for simplicity (Render free tier)
 )
 
