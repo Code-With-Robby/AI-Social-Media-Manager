@@ -1,5 +1,7 @@
-Flask
-openai
+crewai
+crewai[google-genai]
+crewai-tools   # for SerperDevTool
 python-dotenv
-gunicorn
-openai-agents
+flask         # for the web form
+gunicorn     # Render's default WSGI server
+#serper-dev    # if using Serper tool
