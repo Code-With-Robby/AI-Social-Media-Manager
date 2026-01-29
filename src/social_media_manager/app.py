@@ -1,4 +1,4 @@
-# app.py - Fixed version with Copy Button and Daily Limit handling
+# app.py - Fixed version with Copy to Clipboard functionality
 from flask import Flask, request, render_template_string, Response
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -35,7 +35,7 @@ INDEX_HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Personalized DM Generator</title>
     <style>
-        :root { --bg: #0f0f0f; --card: #1a1a1a; --text: #e0e0e0; --accent: #3b82f6; --accent-hover: #60a5fa; --border: #333; --success: #10b981; --success-hover: #059669; --error: #ef4444; }
+        :root { --bg: #0f0f0f; --card: #1a1a1a; --text: #e0e0e0; --accent: #3b82f6; --accent-hover: #60a5fa; --border: #333; --success: #10b981; --success-hover: #059669; }
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem 1rem; }
         .container { max-width: 700px; margin: 0 auto; }
@@ -71,17 +71,6 @@ INDEX_HTML = """
         }
         .copy-btn:hover { background: var(--success-hover); }
         .copy-btn.copied { background: #333; content: "Copied!"; }
-        
-        /* Error Box Style */
-        .limit-error {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid var(--error);
-            color: #fca5a5;
-            padding: 1rem;
-            border-radius: 6px;
-            margin-top: 1rem;
-            text-align: center;
-        }
     </style>
 </head>
 <body>
@@ -170,25 +159,11 @@ INDEX_HTML = """
 
                 if (message === '[DONE]') {
                     eventSource.close();
-                    // Don't hide progress if we showed an error inside it
-                    if (!status.innerHTML.includes('limit-error')) {
-                        progress.style.display = 'none';
-                        resultSection.style.display = 'block';
-                    } else {
-                        // If error, keep progress box visible but hide spinner if desired
-                        // (CSS handles the spinner based on new content)
-                    }
+                    progress.style.display = 'none';
+                    resultSection.style.display = 'block';
                     submitButton.disabled = false;
                     submitButton.textContent = 'Generate DM';
-                } 
-                else if (message === '[LIMIT_REACHED]') {
-                    const errorMsg = document.createElement('div');
-                    errorMsg.className = 'limit-error';
-                    errorMsg.innerHTML = '<strong>⚠️ Daily Limit Reached</strong><br>You have hit the Google Gemini free tier limit (20 requests/day).<br>Please try again in a few minutes or tomorrow.';
-                    status.appendChild(errorMsg);
-                    status.scrollTop = status.scrollHeight;
-                }
-                else if (message === '[DM_START]') {
+                } else if (message === '[DM_START]') {
                     isReceivingDM = true;
                     dmContent = '';
                 } else if (isReceivingDM) {
@@ -267,18 +242,12 @@ def stream_dm():
             
             yield "data: [DM_START]\n\n"
             
+            # Send the full DM as a single encoded JSON message
             yield f"data: {json.dumps(crew_result.raw)}\n\n"
             
             yield "data: [DONE]\n\n"
-            
         except Exception as e:
-            # Check for the specific 429 RESOURCE_EXHAUSTED error
-            error_str = str(e)
-            if "429" in error_str and "RESOURCE_EXHAUSTED" in error_str:
-                yield "data: [LIMIT_REACHED]\n\n"
-            else:
-                yield f"data: Error: {error_str}\n\n"
-            
+            yield f"data: Error: {str(e)}\n\n"
             yield "data: [DONE]\n\n"
 
     return Response(generate_sync(), mimetype='text/event-stream')
