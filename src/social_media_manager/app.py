@@ -1,4 +1,4 @@
-# app.py - Fixed version
+# app.py - Fixed version with proper DM handling
 from flask import Flask, request, render_template_string, Response
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -6,6 +6,7 @@ from .crew import SocialMediaManager
 import os
 import asyncio
 from datetime import datetime
+import json
 
 app = Flask(__name__)
 
@@ -113,9 +114,12 @@ INDEX_HTML = """
             const data = Object.fromEntries(formData);
 
             const eventSource = new EventSource(`/stream_dm?${new URLSearchParams(data)}`);
+            
+            let dmContent = '';
+            let isReceivingDM = false;
 
             eventSource.onmessage = (event) => {
-                const message = event.data.replace('data: ', '').trim();
+                const message = event.data;
 
                 if (message === '[DONE]') {
                     eventSource.close();
@@ -123,11 +127,14 @@ INDEX_HTML = """
                     resultSection.style.display = 'block';
                     submitButton.disabled = false;
                     submitButton.textContent = 'Generate DM';
-                } else if (message.includes('DM generated successfully')) {
-                    // Wait for the next chunk with actual DM content
-                } else if (!message.includes('Starting') && !message.includes('Researching') && !message.includes('complete') && message !== '[DONE]') {
-                    // This is the final DM - display it
-                    dmResult.textContent = message;
+                } else if (message === '[DM_START]') {
+                    // Mark that we're about to receive the DM
+                    isReceivingDM = true;
+                    dmContent = '';
+                } else if (isReceivingDM) {
+                    // Accumulate the DM content
+                    dmContent = message;
+                    dmResult.textContent = dmContent;
                 } else {
                     // Progress message
                     const msg = document.createElement('div');
@@ -195,8 +202,14 @@ def stream_dm():
 
             yield "data: Research complete. Generating DM...\n\n"
             yield "data: DM generated successfully!\n\n"
-            # Send the full DM as one chunk
-            yield f"data: {crew_result}\n\n"
+            
+            # Signal that we're about to send the DM
+            yield "data: [DM_START]\n\n"
+            
+            # Send the full DM as a single encoded message (replace newlines with a marker)
+            dm_encoded = crew_result.replace('\n', '\\n')
+            yield f"data: {dm_encoded}\n\n"
+            
             yield "data: [DONE]\n\n"
         except Exception as e:
             yield f"data: Error: {str(e)}\n\n"
