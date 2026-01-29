@@ -133,7 +133,7 @@ INDEX_HTML = """
                     dmContent = '';
                 } else if (isReceivingDM) {
                     // Accumulate the DM content
-                    dmContent = message;
+                    dmContent = JSON.parse(message);
                     dmResult.textContent = dmContent;
                 } else {
                     // Progress message
@@ -209,7 +209,7 @@ def stream_dm():
             # Send the full DM as a single encoded message (replace newlines with a marker)
             dm_text = crew_result.raw
             #dm_encoded = dm_text.replace('\n', '\\n')
-            yield f"data: {dm_text}\n\n"
+            yield f"data: {json.dumps(crew_result.raw)}\n\n"
             
             yield "data: [DONE]\n\n"
         except Exception as e:
