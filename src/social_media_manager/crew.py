@@ -46,7 +46,7 @@ class SocialMediaManager():
             agents=self.agents,
             tasks=self.tasks,
             process=Process.sequential,
-            verbose=2,  # detailed logging (CrewAI supports int levels)
+            verbose=True,  # detailed logging (CrewAI supports int levels)
             # memory=True,  # optional - enable if you want conversation memory
             # planning=True,  # optional - enable for planning mode
         )
