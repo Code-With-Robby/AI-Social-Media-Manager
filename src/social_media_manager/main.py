@@ -20,7 +20,7 @@ def run():
         print("No niche provided. Exiting.")
         sys.exit(0)
 
-    youtube_channel = input("Enter your YouTube channel handle (e.g. @Code-With-Robby): ").strip()
+    youtube_channel = input("Enter your YouTube channel handle (e.g. @MrBeast: ").strip()
     if not youtube_channel:
         print("No YouTube channel provided. Exiting.")
         sys.exit(0)
