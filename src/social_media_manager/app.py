@@ -1,4 +1,4 @@
-# app.py - Render deployment entry point (generalized + disclaimer + rate limiting)
+# app.py - Render deployment entry point (generalized + disclaimer + rate limiting + progress)
 from flask import Flask, request, render_template_string, Response
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -25,7 +25,7 @@ DISCLAIMER = """
 </p>
 """
 
-# Inline HTML with disclaimer and progress
+# Inline HTML template (no f-string - pure string for Jinja2 compatibility)
 INDEX_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -38,7 +38,8 @@ INDEX_HTML = """
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem 1rem; }
         .container { max-width: 700px; margin: 0 auto; }
-        h1 { text-align: center; color: var(--accent); margin-bottom: 2rem; font-size: 2.2rem; }
+        h1 { text-align: center; color: var(--accent); margin-bottom: 1rem; font-size: 2.2rem; }
+        .disclaimer { background: #2d1a1a; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid #5c2d2d; text-align: center; color: #ff6b6b; font-size: 0.95rem; }
         form { background: var(--card); padding: 2rem; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
         label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: #aaa; }
         input { width: 100%; padding: 0.9rem; margin-bottom: 1.2rem; background: #222; border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 1rem; }
@@ -53,7 +54,6 @@ INDEX_HTML = """
         .status { margin: 0.5rem 0; color: #aaa; }
         .spinner { display: inline-block; width: 1rem; height: 1rem; border: 3px solid #ccc; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 0.5rem; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .disclaimer { background: #2d1a1a; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid #5c2d2d; text-align: center; color: #ff6b6b; font-size: 0.95rem; }
     </style>
 </head>
 <body>
@@ -72,7 +72,7 @@ INDEX_HTML = """
             <input type="text" name="niche" placeholder="e.g. AI and Machine Learning" required>
 
             <label>Your YouTube Channel Handle</label>
-            <input type="text" name="youtube_channel" placeholder="e.g. @MrBeast" required>
+            <input type="text" name="youtube_channel" placeholder="e.g. @Code-With-Robby" required>
 
             <label>Your First Name (for DM signature)</label>
             <input type="text" name="name" placeholder="e.g. Robby" required>
@@ -135,7 +135,7 @@ def home():
     return render_template_string(INDEX_HTML, result=None)
 
 @app.route('/stream_dm')
-@limiter.limit("5 per minute")  # ← Rate limit applied here
+@limiter.limit("5 per minute")
 def stream_dm():
     person_name = request.args.get('person_name', '').strip()
     niche = request.args.get('niche', '').strip()
@@ -145,9 +145,8 @@ def stream_dm():
     if not all([person_name, niche, youtube_channel, name]):
         return Response("Missing required fields", status=400)
 
-    async def generate():
+    def generate_sync():
         yield "data: Starting research...\n\n"
-        await asyncio.sleep(0.5)
 
         inputs = {
             "person_name": person_name,
@@ -159,12 +158,18 @@ def stream_dm():
 
         try:
             yield "data: Researching person and niche...\n\n"
-            await asyncio.sleep(0.5)
 
-            crew_result = await asyncio.to_thread(SocialMediaManager().crew().kickoff, inputs=inputs)
+            # Run async crew synchronously
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                crew_result = loop.run_until_complete(
+                    asyncio.to_thread(SocialMediaManager().crew().kickoff, inputs=inputs)
+                )
+            finally:
+                loop.close()
+
             yield "data: Research complete. Generating DM...\n\n"
-            await asyncio.sleep(0.5)
-
             yield "data: DM generated successfully!\n\n"
             yield f"data: {crew_result}\n\n"
             yield "data: [DONE]\n\n"
@@ -172,7 +177,7 @@ def stream_dm():
             yield f"data: Error: {str(e)}\n\n"
             yield "data: [DONE]\n\n"
 
-    return Response(generate(), mimetype='text/event-stream')
+    return Response(generate_sync(), mimetype='text/event-stream')
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
