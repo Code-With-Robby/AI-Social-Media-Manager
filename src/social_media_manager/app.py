@@ -1,4 +1,4 @@
-# app.py - Fixed version with proper DM handling
+# app.py - Fixed version with Copy Button and Daily Limit handling
 from flask import Flask, request, render_template_string, Response
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -10,23 +10,23 @@ import json
 
 app = Flask(__name__)
 
-# Rate limiting: 5 requests per minute per IP (adjust as needed)
+# Rate limiting: 5 requests per minute per IP
 limiter = Limiter(
     get_remote_address,
     app=app,
     default_limits=["5 per minute"],
-    storage_uri="memory://"  # in-memory for simplicity (Render free tier)
+    storage_uri="memory://" # in-memory for simplicity
 )
 
-# Disclaimer text (visible on UI)
+# Disclaimer text
 DISCLAIMER = """
 <p style="color: #ff6b6b; text-align: center; margin: 1rem 0; font-size: 0.95rem;">
-    <strong>Disclaimer:</strong> This is a personal demo tool for learning agentic AI. 
+    <strong>Disclaimer:</strong> This is a personal demo tool for learning agentic AI.
     Not intended for unsolicited or bulk messaging. Use responsibly and ethically.
 </p>
 """
 
-# Inline HTML template (no f-string - pure string for Jinja2 compatibility)
+# Inline HTML template
 INDEX_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -35,7 +35,7 @@ INDEX_HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Personalized DM Generator</title>
     <style>
-        :root { --bg: #0f0f0f; --card: #1a1a1a; --text: #e0e0e0; --accent: #3b82f6; --accent-hover: #60a5fa; --border: #333; }
+        :root { --bg: #0f0f0f; --card: #1a1a1a; --text: #e0e0e0; --accent: #3b82f6; --accent-hover: #60a5fa; --border: #333; --success: #10b981; --success-hover: #059669; --error: #ef4444; }
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem 1rem; }
         .container { max-width: 700px; margin: 0 auto; }
@@ -45,17 +45,43 @@ INDEX_HTML = """
         label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: #aaa; }
         input { width: 100%; padding: 0.9rem; margin-bottom: 1.2rem; background: #222; border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 1rem; }
         input:focus { outline: none; border-color: var(--accent); }
-        button { width: 100%; padding: 1rem; background: var(--accent); color: white; border: none; border-radius: 6px; font-size: 1.1rem; cursor: pointer; transition: background 0.3s; }
+        
+        button { width: 100%; padding: 1rem; background: var(--accent); color: white; border: none; border-radius: 6px; font-size: 1.1rem; cursor: pointer; transition: background 0.3s; font-weight: 600; }
         button:hover { background: var(--accent-hover); }
         button:disabled { background: #555; cursor: not-allowed; }
+        
         .result-section { margin-top: 2.5rem; display: none; }
-        .result-card { background: var(--card); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); }
+        .result-card { background: var(--card); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); position: relative; }
         h3 { color: var(--accent); margin-bottom: 1rem; }
-        pre { white-space: pre-wrap; background: #111; padding: 1.2rem; border-radius: 8px; font-family: 'Consolas', monospace; font-size: 0.95rem; line-height: 1.5; }
+        pre { white-space: pre-wrap; background: #111; padding: 1.2rem; border-radius: 8px; font-family: 'Consolas', monospace; font-size: 0.95rem; line-height: 1.5; margin-bottom: 1rem; border: 1px solid #333; }
+        
         #progress { margin-top: 1.5rem; padding: 1rem; background: #222; border-radius: 8px; display: none; }
         .status { margin: 0.5rem 0; color: #aaa; }
         .spinner { display: inline-block; width: 1rem; height: 1rem; border: 3px solid #ccc; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 0.5rem; }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Copy Button Styles */
+        .copy-btn { 
+            background: var(--success); 
+            margin-top: 0.5rem; 
+            width: auto; 
+            display: block;
+            margin-left: auto;
+            padding: 0.8rem 1.5rem;
+        }
+        .copy-btn:hover { background: var(--success-hover); }
+        .copy-btn.copied { background: #333; content: "Copied!"; }
+        
+        /* Error Box Style */
+        .limit-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--error);
+            color: #fca5a5;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-top: 1rem;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -71,10 +97,10 @@ INDEX_HTML = """
             <input type="text" name="niche" placeholder="e.g. AI and Machine Learning" required>
 
             <label>Your YouTube Channel Handle</label>
-            <input type="text" name="youtube_channel" placeholder="e.g. @MrBeast" required>
+            <input type="text" name="youtube_channel" placeholder="e.g. @Code-With-Robby" required>
 
             <label>Your First Name (for DM signature)</label>
-            <input type="text" name="name" placeholder="e.g. Rob" required>
+            <input type="text" name="name" placeholder="e.g. Robby" required>
 
             <button type="submit">Generate DM</button>
         </form>
@@ -85,7 +111,10 @@ INDEX_HTML = """
 
         <div class="result-section" id="result-section">
             <div class="result-card">
-                <h3>Generated DM</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="margin-bottom: 0;">Generated DM</h3>
+                    <button id="copy-btn" class="copy-btn">Copy to Clipboard</button>
+                </div>
                 <pre id="dm-result"></pre>
             </div>
         </div>
@@ -94,15 +123,33 @@ INDEX_HTML = """
     <script>
         const form = document.getElementById('dm-form');
         const submitButton = form.querySelector('button[type="submit"]');
+        const copyBtn = document.getElementById('copy-btn');
+        const dmResult = document.getElementById('dm-result');
         
+        // Copy functionality
+        copyBtn.addEventListener('click', () => {
+            const text = dmResult.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = 'Copied!';
+                copyBtn.classList.add('copied');
+                
+                setTimeout(() => {
+                    copyBtn.textContent = originalText;
+                    copyBtn.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+                copyBtn.textContent = 'Error Copying';
+            });
+        });
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const progress = document.getElementById('progress');
             const status = document.getElementById('status-messages');
             const resultSection = document.getElementById('result-section');
-            const dmResult = document.getElementById('dm-result');
 
-            // Disable button and show progress
             submitButton.disabled = true;
             submitButton.textContent = 'Generating...';
             progress.style.display = 'block';
@@ -123,20 +170,36 @@ INDEX_HTML = """
 
                 if (message === '[DONE]') {
                     eventSource.close();
-                    progress.style.display = 'none';
-                    resultSection.style.display = 'block';
+                    // Don't hide progress if we showed an error inside it
+                    if (!status.innerHTML.includes('limit-error')) {
+                        progress.style.display = 'none';
+                        resultSection.style.display = 'block';
+                    } else {
+                        // If error, keep progress box visible but hide spinner if desired
+                        // (CSS handles the spinner based on new content)
+                    }
                     submitButton.disabled = false;
                     submitButton.textContent = 'Generate DM';
-                } else if (message === '[DM_START]') {
-                    // Mark that we're about to receive the DM
+                } 
+                else if (message === '[LIMIT_REACHED]') {
+                    const errorMsg = document.createElement('div');
+                    errorMsg.className = 'limit-error';
+                    errorMsg.innerHTML = '<strong>⚠️ Daily Limit Reached</strong><br>You have hit the Google Gemini free tier limit (20 requests/day).<br>Please try again in a few minutes or tomorrow.';
+                    status.appendChild(errorMsg);
+                    status.scrollTop = status.scrollHeight;
+                }
+                else if (message === '[DM_START]') {
                     isReceivingDM = true;
                     dmContent = '';
                 } else if (isReceivingDM) {
-                    // Accumulate the DM content
-                    dmContent = JSON.parse(message);
-                    dmResult.textContent = dmContent;
+                    try {
+                        dmContent = JSON.parse(message);
+                        dmResult.textContent = dmContent;
+                    } catch (e) {
+                        console.error("Error parsing DM content:", e);
+                        dmResult.textContent = message; 
+                    }
                 } else {
-                    // Progress message
                     const msg = document.createElement('div');
                     msg.className = 'status';
                     msg.innerHTML = '<span class="spinner"></span>' + message;
@@ -190,7 +253,6 @@ def stream_dm():
         try:
             yield "data: Researching person and niche...\n\n"
 
-            # Run async crew synchronously
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
@@ -203,17 +265,20 @@ def stream_dm():
             yield "data: Research complete. Generating DM...\n\n"
             yield "data: DM generated successfully!\n\n"
             
-            # Signal that we're about to send the DM
             yield "data: [DM_START]\n\n"
             
-            # Send the full DM as a single encoded message (replace newlines with a marker)
-            dm_text = crew_result.raw
-            #dm_encoded = dm_text.replace('\n', '\\n')
             yield f"data: {json.dumps(crew_result.raw)}\n\n"
             
             yield "data: [DONE]\n\n"
+            
         except Exception as e:
-            yield f"data: Error: {str(e)}\n\n"
+            # Check for the specific 429 RESOURCE_EXHAUSTED error
+            error_str = str(e)
+            if "429" in error_str and "RESOURCE_EXHAUSTED" in error_str:
+                yield "data: [LIMIT_REACHED]\n\n"
+            else:
+                yield f"data: Error: {error_str}\n\n"
+            
             yield "data: [DONE]\n\n"
 
     return Response(generate_sync(), mimetype='text/event-stream')
