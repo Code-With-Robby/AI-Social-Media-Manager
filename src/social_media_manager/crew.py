@@ -5,7 +5,7 @@ from crewai_tools import SerperDevTool
 from typing import List
 
 @CrewBase
-class SocialMediaMaanger():
+class SocialMediaManager():
     """Dynamic Outreach Crew – Personalized interview invitations for any niche"""
 
     agents: List[BaseAgent]
