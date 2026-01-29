@@ -3,14 +3,18 @@ from crewai.project import CrewBase, agent, crew, task
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai_tools import SerperDevTool
 from typing import List
+import os
+
+# Strip whitespace from API key if present
+if 'SERPER_API_KEY' in os.environ:
+    os.environ['SERPER_API_KEY'] = os.environ['SERPER_API_KEY'].strip()
 
 @CrewBase
 class SocialMediaManager():
     """Dynamic Outreach Crew – Personalized interview invitations for any niche"""
-
     agents: List[BaseAgent]
     tasks: List[Task]
-
+    
     @agent
     def researcher(self) -> Agent:
         return Agent(
@@ -18,27 +22,27 @@ class SocialMediaManager():
             verbose=True,
             tools=[SerperDevTool()]  # web search tool for real-time info
         )
-
+    
     @agent
     def social_media_manager(self) -> Agent:
         return Agent(
             config=self.agents_config['social_media_manager'],  # type: ignore[index]
             verbose=True
         )
-
+    
     @task
     def research_task(self) -> Task:
         return Task(
             config=self.tasks_config['research_task'],  # type: ignore[index]
         )
-
+    
     @task
     def dm_generation_task(self) -> Task:
         return Task(
             config=self.tasks_config['dm_generation_task'],  # type: ignore[index]
             output_file='generated_dm.txt'  # output file for the final DM
         )
-
+    
     @crew
     def crew(self) -> Crew:
         """Creates the dynamic outreach crew"""
@@ -46,7 +50,5 @@ class SocialMediaManager():
             agents=self.agents,
             tasks=self.tasks,
             process=Process.sequential,
-            verbose=True,  # detailed logging (CrewAI supports int levels)
-            # memory=True,  # optional - enable if you want conversation memory
-            # planning=True,  # optional - enable for planning mode
+            verbose=True,
         )
