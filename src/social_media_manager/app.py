@@ -1,4 +1,4 @@
-# app.py - Render deployment entry point (generalized + disclaimer + rate limiting + progress)
+# app.py - Render deployment entry point (generalized + disclaimer + rate limiting + progress + final DM in UI)
 from flask import Flask, request, render_template_string, Response
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -17,7 +17,7 @@ limiter = Limiter(
     storage_uri="memory://"  # in-memory for simplicity (Render free tier)
 )
 
-# Disclaimer text
+# Disclaimer text (visible on UI)
 DISCLAIMER = """
 <p style="color: #ff6b6b; text-align: center; margin: 1rem 0; font-size: 0.95rem;">
     <strong>Disclaimer:</strong> This is a personal demo tool for learning agentic AI. 
@@ -46,11 +46,11 @@ INDEX_HTML = """
         input:focus { outline: none; border-color: var(--accent); }
         button { width: 100%; padding: 1rem; background: var(--accent); color: white; border: none; border-radius: 6px; font-size: 1.1rem; cursor: pointer; transition: background 0.3s; }
         button:hover { background: var(--accent-hover); }
-        .result-section { margin-top: 2.5rem; }
+        .result-section { margin-top: 2.5rem; display: none; }
         .result-card { background: var(--card); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); }
         h3 { color: var(--accent); margin-bottom: 1rem; }
         pre { white-space: pre-wrap; background: #111; padding: 1.2rem; border-radius: 8px; font-family: 'Consolas', monospace; font-size: 0.95rem; line-height: 1.5; }
-        #progress { margin-top: 1.5rem; padding: 1rem; background: #222; border-radius: 8px; display: none; }
+        #progress { margin-top: 1.5rem; padding: 1rem; background: #222; border-radius: 8px; }
         .status { margin: 0.5rem 0; color: #aaa; }
         .spinner { display: inline-block; width: 1rem; height: 1rem; border: 3px solid #ccc; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 0.5rem; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -59,10 +59,7 @@ INDEX_HTML = """
 <body>
     <div class="container">
         <h1>Personalized Interview DM Generator</h1>
-        <div class="disclaimer">
-            <strong>Disclaimer:</strong> This is a personal demo tool for learning agentic AI. 
-            Not intended for unsolicited or bulk messaging. Use responsibly and ethically.
-        </div>
+        <div class="disclaimer">""" + DISCLAIMER + """</div>
 
         <form id="dm-form" method="POST">
             <label>Person/Expert Name</label>
@@ -85,14 +82,12 @@ INDEX_HTML = """
             <div id="status-messages"></div>
         </div>
 
-        {% if result %}
-        <div class="result-section">
+        <div class="result-section" id="result-section">
             <div class="result-card">
                 <h3>Generated DM</h3>
-                <pre id="dm-result">{{ result }}</pre>
+                <pre id="dm-result"></pre>
             </div>
         </div>
-        {% endif %}
     </div>
 
     <script>
@@ -101,27 +96,43 @@ INDEX_HTML = """
             e.preventDefault();
             const progress = document.getElementById('progress');
             const status = document.getElementById('status-messages');
+            const resultSection = document.getElementById('result-section');
+            const dmResult = document.getElementById('dm-result');
+
             progress.style.display = 'block';
             status.innerHTML = '';
+            resultSection.style.display = 'none';
+            dmResult.textContent = '';
 
             const formData = new FormData(form);
             const data = Object.fromEntries(formData);
 
             const eventSource = new EventSource(`/stream_dm?${new URLSearchParams(data)}`);
+
             eventSource.onmessage = (event) => {
-                if (event.data === '[DONE]') {
+                const message = event.data.replace('data: ', '').trim();
+
+                if (message === '[DONE]') {
                     eventSource.close();
                     progress.style.display = 'none';
+                    resultSection.style.display = 'block';
+                } else if (message.includes('DM generated successfully')) {
+                    // Wait for the next chunk with actual DM content
+                } else if (!message.includes('Starting') && !message.includes('Researching') && !message.includes('complete') && message !== '[DONE]') {
+                    // This is the final DM - display it
+                    dmResult.textContent = message;
                 } else {
+                    // Progress message
                     const msg = document.createElement('div');
                     msg.className = 'status';
-                    msg.textContent = event.data;
+                    msg.textContent = message;
                     status.appendChild(msg);
                     status.scrollTop = status.scrollHeight;
                 }
             };
+
             eventSource.onerror = () => {
-                status.innerHTML += '<div class="status">Error: Connection lost</div>';
+                status.innerHTML += '<div class="status">Error: Connection lost. Please try again.</div>';
                 eventSource.close();
             };
         });
@@ -171,6 +182,7 @@ def stream_dm():
 
             yield "data: Research complete. Generating DM...\n\n"
             yield "data: DM generated successfully!\n\n"
+            # Send the full DM as one chunk
             yield f"data: {crew_result}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
