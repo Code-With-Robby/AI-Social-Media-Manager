@@ -1,0 +1,5 @@
+dependencies = [
+    "crewai[google-genai,tools]==1.9.1",
+]
+[tool.crewai]
+entry_point = "app:app"  # points to app.py → Flask app
