@@ -1,4 +1,4 @@
-# app.py - Render deployment entry point (generalized + disclaimer + rate limiting + progress + final DM in UI)
+# app.py - Fixed version
 from flask import Flask, request, render_template_string, Response
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -13,7 +13,7 @@ app = Flask(__name__)
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["5 per minute"],
+    default_limits=["1 per minute"],
     storage_uri="memory://"  # in-memory for simplicity (Render free tier)
 )
 
@@ -46,11 +46,12 @@ INDEX_HTML = """
         input:focus { outline: none; border-color: var(--accent); }
         button { width: 100%; padding: 1rem; background: var(--accent); color: white; border: none; border-radius: 6px; font-size: 1.1rem; cursor: pointer; transition: background 0.3s; }
         button:hover { background: var(--accent-hover); }
+        button:disabled { background: #555; cursor: not-allowed; }
         .result-section { margin-top: 2.5rem; display: none; }
         .result-card { background: var(--card); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); }
         h3 { color: var(--accent); margin-bottom: 1rem; }
         pre { white-space: pre-wrap; background: #111; padding: 1.2rem; border-radius: 8px; font-family: 'Consolas', monospace; font-size: 0.95rem; line-height: 1.5; }
-        #progress { margin-top: 1.5rem; padding: 1rem; background: #222; border-radius: 8px; }
+        #progress { margin-top: 1.5rem; padding: 1rem; background: #222; border-radius: 8px; display: none; }
         .status { margin: 0.5rem 0; color: #aaa; }
         .spinner { display: inline-block; width: 1rem; height: 1rem; border: 3px solid #ccc; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 0.5rem; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -78,7 +79,6 @@ INDEX_HTML = """
         </form>
 
         <div id="progress">
-            <div class="status"><span class="spinner"></span>Starting research...</div>
             <div id="status-messages"></div>
         </div>
 
@@ -92,6 +92,8 @@ INDEX_HTML = """
 
     <script>
         const form = document.getElementById('dm-form');
+        const submitButton = form.querySelector('button[type="submit"]');
+        
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const progress = document.getElementById('progress');
@@ -99,6 +101,9 @@ INDEX_HTML = """
             const resultSection = document.getElementById('result-section');
             const dmResult = document.getElementById('dm-result');
 
+            // Disable button and show progress
+            submitButton.disabled = true;
+            submitButton.textContent = 'Generating...';
             progress.style.display = 'block';
             status.innerHTML = '';
             resultSection.style.display = 'none';
@@ -116,6 +121,8 @@ INDEX_HTML = """
                     eventSource.close();
                     progress.style.display = 'none';
                     resultSection.style.display = 'block';
+                    submitButton.disabled = false;
+                    submitButton.textContent = 'Generate DM';
                 } else if (message.includes('DM generated successfully')) {
                     // Wait for the next chunk with actual DM content
                 } else if (!message.includes('Starting') && !message.includes('Researching') && !message.includes('complete') && message !== '[DONE]') {
@@ -125,15 +132,21 @@ INDEX_HTML = """
                     // Progress message
                     const msg = document.createElement('div');
                     msg.className = 'status';
-                    msg.textContent = message;
+                    msg.innerHTML = '<span class="spinner"></span>' + message;
                     status.appendChild(msg);
                     status.scrollTop = status.scrollHeight;
                 }
             };
 
             eventSource.onerror = () => {
-                status.innerHTML += '<div class="status">Error: Connection lost. Please try again.</div>';
+                const errorMsg = document.createElement('div');
+                errorMsg.className = 'status';
+                errorMsg.style.color = '#ff6b6b';
+                errorMsg.textContent = 'Error: Connection lost. Please try again.';
+                status.appendChild(errorMsg);
                 eventSource.close();
+                submitButton.disabled = false;
+                submitButton.textContent = 'Generate DM';
             };
         });
     </script>
