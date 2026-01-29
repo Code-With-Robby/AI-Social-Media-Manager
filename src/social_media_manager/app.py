@@ -71,10 +71,10 @@ INDEX_HTML = """
             <input type="text" name="niche" placeholder="e.g. AI and Machine Learning" required>
 
             <label>Your YouTube Channel Handle</label>
-            <input type="text" name="youtube_channel" placeholder="e.g. @Code-With-Robby" required>
+            <input type="text" name="youtube_channel" placeholder="e.g. @MrBeast" required>
 
             <label>Your First Name (for DM signature)</label>
-            <input type="text" name="name" placeholder="e.g. Robby" required>
+            <input type="text" name="name" placeholder="e.g. Rob" required>
 
             <button type="submit">Generate DM</button>
         </form>
