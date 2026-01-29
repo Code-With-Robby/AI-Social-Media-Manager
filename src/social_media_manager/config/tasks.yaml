@@ -1,0 +1,33 @@
+research_task:
+  description: >
+    Research the person named {person_name} in the {niche} field.
+    Provide a concise, factual summary of their background, career or contributions, and most relevant/recent accomplishments, projects, publications, awards, milestones, or notable work.
+    Prioritize events, releases, achievements, or developments from 2024–{current_year} if available.
+    Include specific details: dates, collaborators/partners, results/outcomes, recognitions, innovations, or key contributions.
+    Be accurate and neutral — no hype or speculation.
+  expected_output: >
+    A concise paragraph summary (4–8 sentences) containing only the background overview and recent highlights.
+    No introductions, no questions, no bullet points unless needed for clarity.
+  agent: researcher
+
+dm_generation_task:
+  description: >
+    Using the research summary from the previous task, write a concise, respectful, personalized direct message (Instagram, Twitter/X, or LinkedIn DM) inviting {person_name} for an interview on the {youtube_channel} YouTube channel.
+    
+    Step 1: Select 2–3 of the most impressive/recent highlights from the research and mention them naturally at the beginning to show genuine awareness and respect.
+       - Be very specific (dates, projects, collaborators, results, awards, etc.).
+       - Keep the opening natural — never overly flattering.
+    
+    Step 2: Transition smoothly into introducing the channel: it creates authentic, in-depth content, breakdowns, insights, and discussions in {niche} — made for serious enthusiasts and practitioners.
+    
+    Step 3: Clearly invite them for an interview/conversation about their journey, mindset, experience, and insights into {niche}. Emphasize that scheduling is flexible — whenever is convenient for them.
+    
+    Rules:
+    - Tone: friendly, professional, brief, authentic — like a real admirer of the field
+    - First person only ("I"), name: {name}
+    - No hashtags, minimal/no emojis, no corporate/spammy language
+    - Max 1000 characters
+    - Output ONLY the final polished DM — nothing else
+  expected_output: >
+    A single, polished direct message ready to send. Nothing else.
+  agent: social_media_manager
