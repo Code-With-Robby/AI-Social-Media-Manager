@@ -207,7 +207,8 @@ def stream_dm():
             yield "data: [DM_START]\n\n"
             
             # Send the full DM as a single encoded message (replace newlines with a marker)
-            dm_encoded = crew_result.replace('\n', '\\n')
+            dm_text = crew_result.raw
+            dm_encoded = dm_text.replace('\n', '\\n')
             yield f"data: {dm_encoded}\n\n"
             
             yield "data: [DONE]\n\n"
